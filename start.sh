@@ -9,6 +9,7 @@ set -e
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
+RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 APP_NAME="📒 个人记账本"
@@ -25,21 +26,33 @@ FRONTEND_DIR="$PROJECT_DIR/frontend"
 # --------------- 后端 ---------------
 echo -e "${YELLOW}[1/4] 安装后端依赖...${NC}"
 cd "$BACKEND_DIR"
-pip install -r requirements.txt -q 2>/dev/null || pip install -r requirements.txt
+pip install -r requirements.txt || pip install -r requirements.txt
 
 echo -e "${YELLOW}[2/4] 启动后端服务 (端口 8000)...${NC}"
 cd "$BACKEND_DIR"
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload &
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > backend.log 2>&1 &
 BACKEND_PID=$!
 echo -e "${GREEN}  后端 PID: $BACKEND_PID${NC}"
 
-# 等待后端就绪
-sleep 2
+# 等待后端就绪（循环检查）
+echo -e "${YELLOW}  等待后端就绪...${NC}"
+for i in {1..30}; do
+  if curl -s http://localhost:8000/ > /dev/null 2>&1; then
+    echo -e "${GREEN}  后端已就绪！${NC}"
+    break
+  fi
+  if [ $i -eq 30 ]; then
+    echo -e "${RED}  后端启动超时，查看 backend.log:${NC}"
+    cat backend.log
+    exit 1
+  fi
+  sleep 1
+done
 
 # --------------- 种子数据 ---------------
 echo -e "${YELLOW}[2.5/4] 初始化数据库...${NC}"
 cd "$BACKEND_DIR"
-python seed.py
+python seed.py || echo -e "${YELLOW}  数据库已存在，跳过初始化${NC}"
 
 # --------------- 前端 ---------------
 echo -e "${YELLOW}[3/4] 安装前端依赖...${NC}"
@@ -50,9 +63,24 @@ fi
 
 echo -e "${YELLOW}[4/4] 启动前端开发服务器 (端口 3000)...${NC}"
 cd "$FRONTEND_DIR"
-npx vite --host 0.0.0.0 --port 3000 &
+npx vite --host 0.0.0.0 --port 3000 > frontend.log 2>&1 &
 FRONTEND_PID=$!
 echo -e "${GREEN}  前端 PID: $FRONTEND_PID${NC}"
+
+# 等待前端就绪
+echo -e "${YELLOW}  等待前端就绪...${NC}"
+for i in {1..30}; do
+  if curl -s http://localhost:3000/ > /dev/null 2>&1; then
+    echo -e "${GREEN}  前端已就绪！${NC}"
+    break
+  fi
+  if [ $i -eq 30 ]; then
+    echo -e "${RED}  前端启动超时，查看 frontend.log:${NC}"
+    cat frontend.log
+    exit 1
+  fi
+  sleep 1
+done
 
 # --------------- 完成 ---------------
 echo ""
