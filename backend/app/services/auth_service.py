@@ -32,25 +32,21 @@ def register_user(db: Session, data: UserCreate):
     if not verify_code(db, data.email, data.code, mark_used=False):
         raise HTTPException(status_code=400, detail="验证码错误或已过期")
 
-    try:
-        user = User(
-            email=data.email,
-            password_hash=get_password_hash(data.password)
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+    user = User(
+        email=data.email,
+        password_hash=get_password_hash(data.password)
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
 
-        create_preset_categories(db, user.id)
+    create_preset_categories(db, user.id)
 
-        # 注册成功后，标记验证码为已使用
-        mark_code_used(db, data.email, data.code)
+    # 注册成功后，标记验证码为已使用
+    mark_code_used(db, data.email, data.code)
 
-        token = create_access_token(user.id)
-        return {"token": token, "user": {"id": user.id, "email": user.email}}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"注册失败: {str(e)}")
+    token = create_access_token(user.id)
+    return {"token": token, "user": {"id": user.id, "email": user.email}}
 
 
 def login_with_password(db: Session, data: UserLoginPassword):
