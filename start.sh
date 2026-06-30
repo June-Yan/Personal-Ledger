@@ -1,113 +1,108 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # ==========================================================
-# CloudStudio 全栈沙箱 — 一键启动脚本
-# 自动安装依赖并同时启动前后端服务
+# CloudStudio 全栈沙箱 — 一键启动脚本 (POSIX sh 兼容)
 # ==========================================================
-set -e
 
-# 颜色
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
+APP_NAME="个人记账本"
 
-APP_NAME="📒 个人记账本"
-
-echo -e "${CYAN}========================================${NC}"
-echo -e "${CYAN}  ${APP_NAME} — CloudStudio 全栈启动 ${NC}"
-echo -e "${CYAN}========================================${NC}"
+echo "========================================"
+echo "  ${APP_NAME} — CloudStudio 全栈启动"
+echo "========================================"
 echo ""
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BACKEND_DIR="$PROJECT_DIR/backend"
-FRONTEND_DIR="$PROJECT_DIR/frontend"
+BACKEND_DIR="${PROJECT_DIR}/backend"
+FRONTEND_DIR="${PROJECT_DIR}/frontend"
 
 # --------------- 后端 ---------------
-echo -e "${YELLOW}[1/4] 安装后端依赖...${NC}"
-cd "$BACKEND_DIR"
-pip install -r requirements.txt || pip install -r requirements.txt
+echo "[1/4] 安装后端依赖..."
+cd "${BACKEND_DIR}"
+pip install -r requirements.txt
 
-echo -e "${YELLOW}[2/4] 启动后端服务 (端口 8000)...${NC}"
-cd "$BACKEND_DIR"
+echo "[2/4] 启动后端服务 (端口 8000)..."
+cd "${BACKEND_DIR}"
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > backend.log 2>&1 &
 BACKEND_PID=$!
-echo -e "${GREEN}  后端 PID: $BACKEND_PID${NC}"
+echo "  后端 PID: ${BACKEND_PID}"
 
-# 等待后端就绪（循环检查）
-echo -e "${YELLOW}  等待后端就绪...${NC}"
-for i in {1..30}; do
+# 等待后端就绪
+echo "  等待后端就绪..."
+i=0
+while [ $i -lt 30 ]; do
   if curl -s http://localhost:8000/ > /dev/null 2>&1; then
-    echo -e "${GREEN}  后端已就绪！${NC}"
+    echo "  后端已就绪！"
     break
   fi
-  if [ $i -eq 30 ]; then
-    echo -e "${RED}  后端启动超时，查看 backend.log:${NC}"
-    cat backend.log
-    exit 1
-  fi
+  i=$((i + 1))
   sleep 1
 done
+if [ $i -eq 30 ]; then
+  echo "  后端启动超时，日志:"
+  cat backend.log
+  exit 1
+fi
 
 # --------------- 种子数据 ---------------
-echo -e "${YELLOW}[2.5/4] 初始化数据库...${NC}"
-cd "$BACKEND_DIR"
-python seed.py || echo -e "${YELLOW}  数据库已存在，跳过初始化${NC}"
+echo "[2.5/4] 初始化数据库..."
+cd "${BACKEND_DIR}"
+python seed.py || echo "  数据库已存在，跳过"
 
 # --------------- 前端 ---------------
-echo -e "${YELLOW}[3/4] 安装前端依赖...${NC}"
-cd "$FRONTEND_DIR"
+echo "[3/4] 安装前端依赖..."
+cd "${FRONTEND_DIR}"
 if [ ! -d "node_modules" ]; then
   npm install
 fi
 
-echo -e "${YELLOW}[4/4] 启动前端开发服务器 (端口 3000)...${NC}"
-cd "$FRONTEND_DIR"
+echo "[4/4] 启动前端开发服务器 (端口 3000)..."
+cd "${FRONTEND_DIR}"
 npx vite --host 0.0.0.0 --port 3000 > frontend.log 2>&1 &
 FRONTEND_PID=$!
-echo -e "${GREEN}  前端 PID: $FRONTEND_PID${NC}"
+echo "  前端 PID: ${FRONTEND_PID}"
 
 # 等待前端就绪
-echo -e "${YELLOW}  等待前端就绪...${NC}"
-for i in {1..30}; do
+echo "  等待前端就绪..."
+i=0
+while [ $i -lt 30 ]; do
   if curl -s http://localhost:3000/ > /dev/null 2>&1; then
-    echo -e "${GREEN}  前端已就绪！${NC}"
+    echo "  前端已就绪！"
     break
   fi
-  if [ $i -eq 30 ]; then
-    echo -e "${RED}  前端启动超时，查看 frontend.log:${NC}"
-    cat frontend.log
-    exit 1
-  fi
+  i=$((i + 1))
   sleep 1
 done
+if [ $i -eq 30 ]; then
+  echo "  前端启动超时，日志:"
+  cat frontend.log
+  exit 1
+fi
 
 # --------------- 完成 ---------------
 echo ""
-echo -e "${CYAN}========================================${NC}"
-echo -e "${GREEN}  ✅ ${APP_NAME} 已启动！${NC}"
-echo -e "${CYAN}========================================${NC}"
+echo "========================================"
+echo "  ${APP_NAME} 已启动！"
+echo "========================================"
 echo ""
-echo -e "  📡 前端地址:  ${GREEN}http://localhost:3000${NC}"
-echo -e "  📡 后端地址:  ${GREEN}http://localhost:8000${NC}"
-echo -e "  📖 API 文档:  ${GREEN}http://localhost:8000/docs${NC}"
+echo "  前端地址: http://localhost:3000"
+echo "  后端地址: http://localhost:8000"
+echo "  API 文档: http://localhost:8000/docs"
 echo ""
-echo -e "  ${YELLOW}💡 CloudStudio 会自动检测打开的端口，${NC}"
-echo -e "  ${YELLOW}   生成可公开访问的预览链接。${NC}"
+echo "  CloudStudio 会自动检测端口"
+echo "  生成可公开访问的预览链接"
 echo ""
-echo -e "  ${YELLOW}按 Ctrl+C 停止所有服务${NC}"
+echo "  按 Ctrl+C 停止所有服务"
 echo ""
 
-# 捕获退出信号，清理子进程
+# 捕获退出信号
 cleanup() {
   echo ""
-  echo -e "${YELLOW}正在停止服务...${NC}"
-  kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
-  wait $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
-  echo -e "${GREEN}服务已停止。${NC}"
+  echo "正在停止服务..."
+  kill $BACKEND_PID $FRONTEND_PID 2>/dev/null
+  wait $BACKEND_PID $FRONTEND_PID 2>/dev/null
+  echo "服务已停止。"
   exit 0
 }
-trap cleanup SIGINT SIGTERM
+trap cleanup 2 15
 
 # 保持前台运行
 wait
