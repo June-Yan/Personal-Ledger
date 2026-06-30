@@ -3,7 +3,7 @@ from fastapi import HTTPException, status
 from app.models import User, Category
 from app.schemas.user import UserCreate, UserLoginPassword, UserLoginCode
 from app.utils.security import get_password_hash, verify_password, create_access_token
-from app.utils.email import verify_code, create_verification_code, can_send_code
+from app.utils.email import verify_code, create_verification_code, can_send_code, mark_code_used
 
 
 PRESET_CATEGORIES = [
@@ -28,21 +28,29 @@ def register_user(db: Session, data: UserCreate):
     if existing:
         raise HTTPException(status_code=400, detail="邮箱已注册")
 
-    if not verify_code(db, data.email, data.code):
+    # 先验证验证码，但不标记为已使用
+    if not verify_code(db, data.email, data.code, mark_used=False):
         raise HTTPException(status_code=400, detail="验证码错误或已过期")
 
-    user = User(
-        email=data.email,
-        password_hash=get_password_hash(data.password)
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    try:
+        user = User(
+            email=data.email,
+            password_hash=get_password_hash(data.password)
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
 
-    create_preset_categories(db, user.id)
+        create_preset_categories(db, user.id)
 
-    token = create_access_token(user.id)
-    return {"token": token, "user": {"id": user.id, "email": user.email}}
+        # 注册成功后，标记验证码为已使用
+        mark_code_used(db, data.email, data.code)
+
+        token = create_access_token(user.id)
+        return {"token": token, "user": {"id": user.id, "email": user.email}}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"注册失败: {str(e)}")
 
 
 def login_with_password(db: Session, data: UserLoginPassword):

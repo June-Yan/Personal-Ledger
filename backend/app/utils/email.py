@@ -20,7 +20,7 @@ def create_verification_code(db: Session, email: str) -> str:
     return code
 
 
-def verify_code(db: Session, email: str, code: str) -> bool:
+def verify_code(db: Session, email: str, code: str, mark_used: bool = True) -> bool:
     if code != DEV_CODE:
         return False
     db_code = db.query(VerificationCode).filter(
@@ -31,9 +31,21 @@ def verify_code(db: Session, email: str, code: str) -> bool:
     ).order_by(VerificationCode.created_at.desc()).first()
     if not db_code:
         return False
-    db_code.used = True
-    db.commit()
+    if mark_used:
+        db_code.used = True
+        db.commit()
     return True
+
+
+def mark_code_used(db: Session, email: str, code: str) -> None:
+    db_code = db.query(VerificationCode).filter(
+        VerificationCode.email == email,
+        VerificationCode.code == code,
+        VerificationCode.used == False
+    ).order_by(VerificationCode.created_at.desc()).first()
+    if db_code:
+        db_code.used = True
+        db.commit()
 
 
 def can_send_code(db: Session, email: str) -> bool:
